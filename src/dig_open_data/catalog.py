@@ -11,6 +11,7 @@ from .api import open_text
 
 DEFAULT_BUCKET = "dig-open-bottom-line-analysis"
 DEFAULT_PREFIX = "bottom-line/"
+DEFAULT_SUFFIX = ".sumstats.tsv.gz"
 DOC_FILENAMES = (
     "README",
     "README.md",
@@ -33,6 +34,8 @@ class ListObjectsResult:
 @dataclass(frozen=True)
 class FileEntry:
     ancestry: str | None
+    trait: str | None
+    filename: str
     key: str
 
 
@@ -152,25 +155,70 @@ def list_files_with_metadata(
         contains=contains,
     )
     base_prefix = _ensure_prefix(prefix)
-    ancestry_from_prefix = None
-    if ancestry is None:
-        ancestry_from_prefix = _extract_ancestry_from_prefix(prefix, DEFAULT_PREFIX)
     entries: list[FileEntry] = []
     for key in keys:
-        detected = None
-        if ancestry is not None:
-            detected = ancestry
-        else:
-            detected = _extract_ancestry_from_key(key, DEFAULT_PREFIX)
-            if detected is None:
-                detected = _extract_ancestry_from_key(key, base_prefix)
-            if detected is None:
-                detected = ancestry_from_prefix
-        entries.append(FileEntry(ancestry=detected, key=key))
+        entry = _key_to_file_entry(
+            key,
+            base_prefix=base_prefix,
+            default_prefix=DEFAULT_PREFIX,
+            ancestry_override=ancestry,
+        )
+        entries.append(entry)
     entries = sorted(entries, key=lambda e: (e.ancestry or "", e.key))
     if limit is None:
         return entries
     return entries[: max(0, limit)]
+
+
+def list_traits(
+    *,
+    bucket: str = DEFAULT_BUCKET,
+    prefix: str = DEFAULT_PREFIX,
+    ancestry: str | None = None,
+    max_keys: int = 1000,
+    limit: int | None = None,
+    contains: str | None = None,
+) -> list[str]:
+    entries = list_files_with_metadata(
+        bucket=bucket,
+        prefix=prefix,
+        ancestry=ancestry,
+        max_keys=max_keys,
+        limit=None,
+        contains=contains,
+    )
+    traits = sorted({entry.trait for entry in entries if entry.trait})
+    if limit is None:
+        return traits
+    return traits[: max(0, limit)]
+
+
+def build_key(
+    ancestry: str,
+    trait: str,
+    *,
+    prefix: str = DEFAULT_PREFIX,
+    suffix: str = DEFAULT_SUFFIX,
+) -> str:
+    clean_trait = trait
+    if clean_trait.endswith(suffix):
+        clean_trait = clean_trait[: -len(suffix)]
+    filename = f"{clean_trait}{suffix}"
+    return _join_prefix(_ensure_prefix(prefix), ancestry) + filename
+
+
+def open_trait(
+    ancestry: str,
+    trait: str,
+    *,
+    bucket: str = DEFAULT_BUCKET,
+    prefix: str = DEFAULT_PREFIX,
+    suffix: str = DEFAULT_SUFFIX,
+    encoding: str = "utf-8",
+):
+    key = build_key(ancestry, trait, prefix=prefix, suffix=suffix)
+    uri = f"s3://{bucket}/{key}"
+    return open_text(uri, encoding=encoding)
 
 
 def get_documentation(
@@ -313,3 +361,27 @@ def _extract_ancestry_from_prefix(prefix: str, base_prefix: str) -> str | None:
     if not remainder:
         return None
     return remainder.split("/", 1)[0]
+
+
+def _key_to_file_entry(
+    key: str,
+    *,
+    base_prefix: str,
+    default_prefix: str,
+    ancestry_override: str | None,
+) -> FileEntry:
+    ancestry = None
+    if ancestry_override is not None:
+        ancestry = ancestry_override
+    else:
+        ancestry = _extract_ancestry_from_key(key, default_prefix)
+        if ancestry is None:
+            ancestry = _extract_ancestry_from_key(key, base_prefix)
+        if ancestry is None:
+            ancestry = _extract_ancestry_from_prefix(base_prefix, default_prefix)
+
+    filename = os.path.basename(key)
+    trait = None
+    if filename.endswith(DEFAULT_SUFFIX):
+        trait = filename[: -len(DEFAULT_SUFFIX)]
+    return FileEntry(ancestry=ancestry, trait=trait, filename=filename, key=key)

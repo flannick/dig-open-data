@@ -56,8 +56,18 @@ class TestCliList(unittest.TestCase):
 
     def test_list_with_ancestry(self):
         entries = [
-            mock.Mock(ancestry="Mixed", key="bottom-line/Mixed/a.tsv.gz"),
-            mock.Mock(ancestry="EA", key="bottom-line/EA/b.tsv.gz"),
+            mock.Mock(
+                ancestry="Mixed",
+                trait="Perc15",
+                filename="Perc15.sumstats.tsv.gz",
+                key="bottom-line/Mixed/Perc15.sumstats.tsv.gz",
+            ),
+            mock.Mock(
+                ancestry="EA",
+                trait="CAD",
+                filename="CAD.sumstats.tsv.gz",
+                key="bottom-line/EA/CAD.sumstats.tsv.gz",
+            ),
         ]
         with mock.patch("dig_open_data.cli.list_files_with_metadata", return_value=entries) as mocked:
             out = io.StringIO()
@@ -66,7 +76,10 @@ class TestCliList(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(
             out.getvalue().strip().splitlines(),
-            ["Mixed\tbottom-line/Mixed/a.tsv.gz", "EA\tbottom-line/EA/b.tsv.gz"],
+            [
+                "Mixed\tPerc15\tbottom-line/Mixed/Perc15.sumstats.tsv.gz",
+                "EA\tCAD\tbottom-line/EA/CAD.sumstats.tsv.gz",
+            ],
         )
         mocked.assert_called_with(
             bucket=cli.DEFAULT_BUCKET,
@@ -149,6 +162,43 @@ class TestCliDocs(unittest.TestCase):
                 code = cli.main(["docs", "dataset1/", "--json"])
         self.assertEqual(code, 0)
         self.assertIn("\"dataset1/README.md\"", out.getvalue())
+
+
+class TestCliStream(unittest.TestCase):
+    def test_stream(self):
+        fake_handle = io.StringIO("line1\nline2\n")
+        with mock.patch("dig_open_data.cli.open_text", return_value=fake_handle):
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = cli.main(["stream", "--uri", "s3://bucket/key"])
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue(), "line1\nline2\n")
+
+
+class TestCliTraits(unittest.TestCase):
+    def test_traits_plain(self):
+        with mock.patch("dig_open_data.cli.list_traits", return_value=["CAD", "T2D"]) as mocked:
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = cli.main(["traits"])
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue().strip().splitlines(), ["CAD", "T2D"])
+        mocked.assert_called_with(
+            bucket=cli.DEFAULT_BUCKET,
+            prefix=cli.DEFAULT_PREFIX,
+            ancestry=None,
+            max_keys=1000,
+            limit=None,
+            contains=None,
+        )
+
+    def test_traits_json(self):
+        with mock.patch("dig_open_data.cli.list_traits", return_value=["CAD"]):
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = cli.main(["traits", "--json"])
+        self.assertEqual(code, 0)
+        self.assertIn("\"CAD\"", out.getvalue())
 
 
 if __name__ == "__main__":

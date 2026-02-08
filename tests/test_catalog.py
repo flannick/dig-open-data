@@ -9,6 +9,7 @@ from dig_open_data.catalog import (
     get_documentation,
     list_dataset_files,
     list_files_with_metadata,
+    list_traits,
 )
 
 
@@ -99,8 +100,18 @@ class TestListFilesWithMetadata(unittest.TestCase):
         self.assertEqual(
             entries,
             [
-                FileEntry(ancestry="EA", key="bottom-line/EA/b.tsv.gz"),
-                FileEntry(ancestry="Mixed", key="bottom-line/Mixed/a.tsv.gz"),
+                FileEntry(
+                    ancestry="EA",
+                    trait=None,
+                    filename="b.tsv.gz",
+                    key="bottom-line/EA/b.tsv.gz",
+                ),
+                FileEntry(
+                    ancestry="Mixed",
+                    trait=None,
+                    filename="a.tsv.gz",
+                    key="bottom-line/Mixed/a.tsv.gz",
+                ),
             ],
         )
 
@@ -115,7 +126,14 @@ class TestListFilesWithMetadata(unittest.TestCase):
             entries = list_files_with_metadata(ancestry="Mixed")
         self.assertEqual(
             entries,
-            [FileEntry(ancestry="Mixed", key="bottom-line/Mixed/a.tsv.gz")],
+            [
+                FileEntry(
+                    ancestry="Mixed",
+                    trait=None,
+                    filename="a.tsv.gz",
+                    key="bottom-line/Mixed/a.tsv.gz",
+                )
+            ],
         )
 
     def test_list_files_with_metadata_contains(self):
@@ -132,8 +150,32 @@ class TestListFilesWithMetadata(unittest.TestCase):
             entries = list_files_with_metadata(prefix="bottom-line/EU/", contains="T2D")
         self.assertEqual(
             entries,
-            [FileEntry(ancestry="EU", key="bottom-line/EU/AlbInT2D.sumstats.tsv.gz")],
+            [
+                FileEntry(
+                    ancestry="EU",
+                    trait="AlbInT2D",
+                    filename="AlbInT2D.sumstats.tsv.gz",
+                    key="bottom-line/EU/AlbInT2D.sumstats.tsv.gz",
+                )
+            ],
         )
+
+
+class TestListTraits(unittest.TestCase):
+    def test_list_traits(self):
+        fake_result = ListObjectsResult(
+            keys=[
+                "bottom-line/EU/AlbInT2D.sumstats.tsv.gz",
+                "bottom-line/EU/CAD.sumstats.tsv.gz",
+                "bottom-line/EU/README.md",
+            ],
+            common_prefixes=[],
+            is_truncated=False,
+            next_token=None,
+        )
+        with mock.patch("dig_open_data.catalog.list_all_objects", return_value=fake_result):
+            traits = list_traits(prefix="bottom-line/EU/")
+        self.assertEqual(traits, ["AlbInT2D", "CAD"])
 
 
 if __name__ == "__main__":

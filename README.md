@@ -1,6 +1,6 @@
 # DIG Open Data GWAS Access Module
 
-Small, dependency-light helpers to open GWAS inputs as **streaming text** from local disk or the public DIG Open Data S3 registry. It is designed to be a drop-in replacement for ORIOLE's `_open_text` function without changing parsing logic.
+Small, dependency-light helpers to open GWAS inputs as **streaming text** from local disk or the public DIG Open Data S3 registry.
 
 ## Features
 
@@ -20,23 +20,13 @@ python -m pip install -e .
 ## Quick Start
 
 ```python
-from dig_open_data import open_text
+from dig_open_data import open_trait
 
-with open_text("s3://dig-open-bottom-line-analysis/path/aligned_bmi.tsv.gz") as f:
+with open_trait("EU", "AlbInT2D") as f:
     header = f.readline()
     for line in f:
         # parse line
         pass
-```
-
-Local files work the same way:
-
-```python
-from dig_open_data import open_text
-
-with open_text("/path/to/local.tsv.gz") as f:
-    for line in f:
-        ...
 ```
 
 ## Public API
@@ -47,42 +37,32 @@ with open_text("/path/to/local.tsv.gz") as f:
 - `register_backend(backend) -> None`
 - `iter_lines(uri: str, *, encoding: str = "utf-8") -> Iterator[str]`
 - `iter_tsv_dicts(uri: str, *, delimiter: str = "\t", encoding: str = "utf-8") -> Iterator[dict[str, str]]`
-- `list_objects(*, bucket: str = DEFAULT_BUCKET, prefix: str = "", delimiter: str | None = None, max_keys: int = 1000) -> ListObjectsResult`
-- `list_all_objects(*, bucket: str = DEFAULT_BUCKET, prefix: str = "", delimiter: str | None = None, max_keys: int = 1000) -> ListObjectsResult`
-- `list_datasets(*, bucket: str = DEFAULT_BUCKET, prefix: str = "", max_keys: int = 1000, limit: int | None = None) -> list[str]`
 - `list_ancestries(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, max_keys: int = 1000) -> list[str]`
+- `list_traits(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, ancestry: str | None = None, max_keys: int = 1000, limit: int | None = None, contains: str | None = None) -> list[str]`
 - `list_dataset_files(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, max_keys: int = 1000, limit: int | None = None, ancestry: str | None = None, contains: str | None = None) -> list[str]`
 - `list_files_with_metadata(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, ancestry: str | None = None, max_keys: int = 1000, limit: int | None = None, contains: str | None = None) -> list[FileEntry]`
+- `build_key(ancestry: str, trait: str, *, prefix: str = DEFAULT_PREFIX, suffix: str = DEFAULT_SUFFIX) -> str`
+- `open_trait(ancestry: str, trait: str, *, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, suffix: str = DEFAULT_SUFFIX, encoding: str = "utf-8") -> TextIO`
 - `get_documentation(dataset_prefix: str, *, bucket: str = DEFAULT_BUCKET, recursive: bool = False, doc_filenames: Iterable[str] = DOC_FILENAMES) -> dict[str, str]`
 - `list_datasets_with_docs(*, bucket: str = DEFAULT_BUCKET, prefix: str = "", recursive: bool = False, doc_filenames: Iterable[str] = DOC_FILENAMES) -> list[tuple[str, dict[str, str]]]`
 
-## URI Formats
-
-- Local path (no scheme): `/path/to/file.tsv.gz`
-- File URI: `file:///path/to/file.tsv.gz`
-- Direct S3: `s3://dig-open-bottom-line-analysis/path/file.tsv.gz`
-- Registry alias: `registry://dig-open-bottom-line-analysis/path/file.tsv.gz`
-
-`registry://` resolves to `s3://` and is provided for convenience.
-
 ## Input Formats
 
-This module is format-agnostic. It simply returns a streaming text handle. Downstream tools (like ORIOLE) are expected to parse the file (TSV, CSV, etc.).
+This module is format-agnostic. It simply returns a streaming text handle. Downstream tools are expected to parse the file (TSV, CSV, etc.).
 
 ## Dataset Discovery Utilities
 
-You can list available files in the DIG Open Data public bucket and retrieve documentation files stored alongside datasets.
+You can list available files by ancestry and trait name, and retrieve documentation files stored alongside datasets.
 
 ```python
-from dig_open_data import list_dataset_files, list_files_with_metadata, get_documentation
+from dig_open_data import list_ancestries, list_traits, list_files_with_metadata
 
-files = list_dataset_files()
-for key in files:
-    print(key)
-
+ancestries = list_ancestries()
+traits = list_traits(ancestry="EU")
 entries = list_files_with_metadata(ancestry="EU")
+
 for entry in entries:
-    print(entry.ancestry, entry.key)
+    print(entry.ancestry, entry.trait, entry.key)
 ```
 
 Notes:
@@ -114,7 +94,6 @@ List files under the default DIG prefix (`bottom-line/`):
 ```bash
 dig-open-data list
 dig-open-data list --limit 10
-dig-open-data list --prefix path/to/subset/ --json
 dig-open-data list --ancestry EUR --json
 dig-open-data list --contains T2D
 dig-open-data list --max-keys 500
@@ -128,7 +107,22 @@ dig-open-data ancestries --json
 dig-open-data ancestries --max-keys 500
 ```
 
-Include ancestry metadata in listings:
+List available trait names:
+
+```bash
+dig-open-data traits
+dig-open-data traits --ancestry EU --contains T2D
+dig-open-data traits --json
+```
+
+Stream a file to stdout:
+
+```bash
+dig-open-data stream --ancestry EU --trait AlbInT2D | head
+dig-open-data stream --file bottom-line/EU/AlbInT2D.sumstats.tsv.gz | head
+```
+
+Include ancestry + trait metadata in listings:
 
 ```bash
 dig-open-data list --with-ancestry
@@ -151,13 +145,15 @@ From the repo root:
 PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli list
 PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli list --with-ancestry
 PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli ancestries
+PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli traits --ancestry EU
+PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli stream --ancestry EU --trait AlbInT2D | head
 PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli docs dataset1/ --recursive
 ```
 
 ### Listing Best Practices
 
 - S3 ListObjectsV2 returns up to 1,000 keys per request, so large listings are paginated; this CLI paginates automatically but you should still use `--limit` to keep outputs manageable.
-- Use `--prefix` (or `--ancestry`) to scope listings to a smaller portion of the bucket.
+- Use `--ancestry` and `--contains` to scope listings to a smaller portion of the bucket.
 - Dataset and ancestry discovery uses the S3 `delimiter="/"` behavior to return `CommonPrefixes` that act like subdirectories; this is why ancestry and dataset listings return prefixes rather than raw files.
 
 ## Design Notes
