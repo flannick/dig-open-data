@@ -19,6 +19,9 @@ classifiers = [
 [project.urls]
 Homepage = "https://example.invalid/dig-open-data"
 
+[project.scripts]
+dig-open-data = "dig_open_data.cli:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
