@@ -51,8 +51,8 @@ with open_text("/path/to/local.tsv.gz") as f:
 - `list_all_objects(*, bucket: str = DEFAULT_BUCKET, prefix: str = "", delimiter: str | None = None, max_keys: int = 1000) -> ListObjectsResult`
 - `list_datasets(*, bucket: str = DEFAULT_BUCKET, prefix: str = "", max_keys: int = 1000, limit: int | None = None) -> list[str]`
 - `list_ancestries(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, max_keys: int = 1000) -> list[str]`
-- `list_datasets_with_ancestry(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, ancestry: str | None = None, max_keys: int = 1000, limit: int | None = None) -> list[DatasetEntry]`
-- `list_dataset_files(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, max_keys: int = 1000, limit: int | None = None) -> list[str]`
+- `list_dataset_files(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, max_keys: int = 1000, limit: int | None = None, ancestry: str | None = None, contains: str | None = None) -> list[str]`
+- `list_files_with_metadata(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, ancestry: str | None = None, max_keys: int = 1000, limit: int | None = None, contains: str | None = None) -> list[FileEntry]`
 - `get_documentation(dataset_prefix: str, *, bucket: str = DEFAULT_BUCKET, recursive: bool = False, doc_filenames: Iterable[str] = DOC_FILENAMES) -> dict[str, str]`
 - `list_datasets_with_docs(*, bucket: str = DEFAULT_BUCKET, prefix: str = "", recursive: bool = False, doc_filenames: Iterable[str] = DOC_FILENAMES) -> list[tuple[str, dict[str, str]]]`
 
@@ -71,20 +71,22 @@ This module is format-agnostic. It simply returns a streaming text handle. Downs
 
 ## Dataset Discovery Utilities
 
-You can list available datasets in the DIG Open Data public bucket and retrieve documentation files stored alongside datasets.
+You can list available files in the DIG Open Data public bucket and retrieve documentation files stored alongside datasets.
 
 ```python
-from dig_open_data import list_datasets, get_documentation
+from dig_open_data import list_dataset_files, list_files_with_metadata, get_documentation
 
-datasets = list_datasets()
-for dataset in datasets:
-    docs = get_documentation(dataset)
-    if docs:
-        print(dataset, list(docs.keys()))
+files = list_dataset_files()
+for key in files:
+    print(key)
+
+entries = list_files_with_metadata(ancestry="EU")
+for entry in entries:
+    print(entry.ancestry, entry.key)
 ```
 
 Notes:
-- `list_datasets()` uses S3 ListObjectsV2 with `delimiter="/"` to return top-level prefixes.
+- `list_dataset_files()` uses S3 ListObjectsV2 to return full object keys.
 - `get_documentation()` looks for common doc filenames (README, manifest, metadata). Set `recursive=True` to search deeper paths.
 
 ## Tests
@@ -114,6 +116,7 @@ dig-open-data list
 dig-open-data list --limit 10
 dig-open-data list --prefix path/to/subset/ --json
 dig-open-data list --ancestry EUR --json
+dig-open-data list --contains T2D
 dig-open-data list --max-keys 500
 ```
 
