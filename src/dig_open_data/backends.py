@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 import urllib.parse
 import urllib.request
 from typing import BinaryIO, Protocol
@@ -46,37 +47,72 @@ class LocalBackend:
 class S3HttpBackend:
     schemes = {"s3"}
 
+    def __init__(self, *, retries: int = 2, backoff: float = 0.5) -> None:
+        self._retries = max(0, retries)
+        self._backoff = max(0.0, backoff)
+
     def open_binary(self, uri: str) -> BinaryIO:
-        url = s3_uri_to_https_url(uri)
-        request = urllib.request.Request(url, method="GET", headers={"User-Agent": "dig-open-data/0.1"})
-        try:
-            return urllib.request.urlopen(request, timeout=60)
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:
-                raise FileNotFoundError(f"S3 object not found: {uri} (resolved {url})") from exc
+        urls = s3_uri_to_https_urls(uri)
+        last_error: Exception | None = None
+        for url in urls:
+            for attempt in range(self._retries + 1):
+                request = urllib.request.Request(
+                    url, method="GET", headers={"User-Agent": "dig-open-data/0.1"}
+                )
+                try:
+                    return urllib.request.urlopen(request, timeout=60)
+                except urllib.error.HTTPError as exc:
+                    if exc.code == 404:
+                        raise FileNotFoundError(
+                            f"S3 object not found: {uri} (resolved {url})"
+                        ) from exc
+                    last_error = exc
+                    if attempt < self._retries and exc.code in {429, 500, 502, 503, 504}:
+                        time.sleep(self._backoff * (2**attempt))
+                        continue
+                    break
+                except urllib.error.URLError as exc:
+                    last_error = exc
+                    if attempt < self._retries:
+                        time.sleep(self._backoff * (2**attempt))
+                        continue
+                    break
+        if isinstance(last_error, urllib.error.HTTPError):
             raise RuntimeError(
-                f"S3 request failed: {uri} (resolved {url}) status={exc.code}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"S3 request failed: {uri} (resolved {url})") from exc
+                f"S3 request failed: {uri} status={last_error.code} reason={last_error.reason}"
+            ) from last_error
+        raise RuntimeError(f"S3 request failed: {uri}") from last_error
 
     def exists(self, uri: str) -> bool:
-        url = s3_uri_to_https_url(uri)
-        request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "dig-open-data/0.1"})
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                return response.status == 200
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:
-                return False
+        urls = s3_uri_to_https_urls(uri)
+        last_error: Exception | None = None
+        for url in urls:
+            request = urllib.request.Request(
+                url, method="HEAD", headers={"User-Agent": "dig-open-data/0.1"}
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    return response.status == 200
+            except urllib.error.HTTPError as exc:
+                if exc.code == 404:
+                    return False
+                last_error = exc
+                continue
+            except urllib.error.URLError as exc:
+                last_error = exc
+                continue
+        if isinstance(last_error, urllib.error.HTTPError):
             raise RuntimeError(
-                f"S3 request failed: {uri} (resolved {url}) status={exc.code}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"S3 request failed: {uri} (resolved {url})") from exc
+                f"S3 request failed: {uri} status={last_error.code} reason={last_error.reason}"
+            ) from last_error
+        raise RuntimeError(f"S3 request failed: {uri}") from last_error
 
 
 def s3_uri_to_https_url(uri: str) -> str:
+    return s3_uri_to_https_urls(uri)[0]
+
+
+def s3_uri_to_https_urls(uri: str) -> list[str]:
     parsed = urllib.parse.urlparse(uri)
     if parsed.scheme != "s3":
         raise ValueError(f"Expected s3:// URI, got: {uri}")
@@ -84,5 +120,11 @@ def s3_uri_to_https_url(uri: str) -> str:
     key = parsed.path.lstrip("/")
     quoted_key = urllib.parse.quote(key, safe="/")
     if quoted_key:
-        return f"https://{bucket}.s3.amazonaws.com/{quoted_key}"
-    return f"https://{bucket}.s3.amazonaws.com/"
+        return [
+            f"https://{bucket}.s3.amazonaws.com/{quoted_key}",
+            f"https://s3.amazonaws.com/{bucket}/{quoted_key}",
+        ]
+    return [
+        f"https://{bucket}.s3.amazonaws.com/",
+        f"https://s3.amazonaws.com/{bucket}/",
+    ]

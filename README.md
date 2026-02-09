@@ -17,6 +17,12 @@ This module uses only the Python standard library. If you want to package it:
 python -m pip install -e .
 ```
 
+If your environment blocks network access during build isolation, use:
+
+```bash
+python -m pip install -e . --no-build-isolation
+```
+
 ## Quick Start
 
 ```python
