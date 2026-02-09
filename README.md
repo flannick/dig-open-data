@@ -23,6 +23,22 @@ If your environment blocks network access during build isolation, use:
 python -m pip install -e . --no-build-isolation
 ```
 
+## R Package (digOpenData)
+
+An R interface lives under `r/digOpenData/` and follows Bioconductor-style conventions.
+
+Quick usage (from inside the R package directory):
+
+```r
+library(digOpenData)
+
+list_ancestries()
+list_traits(ancestry = "EU")
+
+con <- open_trait("EU", "AlbInT2D")
+lines <- read_lines("s3://dig-open-bottom-line-analysis/bottom-line/EU/AlbInT2D.sumstats.tsv.gz")
+```
+
 ## Quick Start
 
 ```python
@@ -45,6 +61,7 @@ with open_trait("EU", "AlbInT2D") as f:
 - `iter_tsv_dicts(uri: str, *, delimiter: str = "\t", encoding: str = "utf-8") -> Iterator[dict[str, str]]`
 - `list_ancestries(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, max_keys: int = 1000) -> list[str]`
 - `list_traits(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, ancestry: str | None = None, max_keys: int = 1000, limit: int | None = None, contains: str | None = None) -> list[str]`
+- `list_files(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, max_keys: int = 1000, limit: int | None = None, ancestry: str | None = None, contains: str | None = None) -> list[str]`
 - `list_dataset_files(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, max_keys: int = 1000, limit: int | None = None, ancestry: str | None = None, contains: str | None = None) -> list[str]`
 - `list_files_with_metadata(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, ancestry: str | None = None, max_keys: int = 1000, limit: int | None = None, contains: str | None = None) -> list[FileEntry]`
 - `build_key(ancestry: str, trait: str, *, prefix: str = DEFAULT_PREFIX, suffix: str = DEFAULT_SUFFIX) -> str`

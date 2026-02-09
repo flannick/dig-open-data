@@ -137,6 +137,25 @@ def list_dataset_files(
     return files[: max(0, limit)]
 
 
+def list_files(
+    *,
+    bucket: str = DEFAULT_BUCKET,
+    prefix: str = DEFAULT_PREFIX,
+    max_keys: int = 1000,
+    limit: int | None = None,
+    ancestry: str | None = None,
+    contains: str | None = None,
+) -> list[str]:
+    return list_dataset_files(
+        bucket=bucket,
+        prefix=prefix,
+        max_keys=max_keys,
+        limit=limit,
+        ancestry=ancestry,
+        contains=contains,
+    )
+
+
 def list_files_with_metadata(
     *,
     bucket: str = DEFAULT_BUCKET,

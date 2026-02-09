@@ -1,0 +1,23 @@
+Package: digOpenData
+Type: Package
+Title: Streaming Access to DIG Open Data GWAS Files
+Version: 0.1.0
+Authors@R: c(
+    person("DIG Open Data Module Contributors", role = c("aut", "cre"))
+)
+Description: Streaming access to DIG Open Data GWAS files with ancestry and trait
+    abstractions, optional caching, and retries for public S3 objects.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends:
+    R (>= 4.2)
+Imports:
+    methods,
+    utils,
+    xml2
+Suggests:
+    testthat
+biocViews: Genetics, GWAS, DataImport
+URL: https://example.invalid/digOpenData
+BugReports: https://example.invalid/digOpenData/issues
