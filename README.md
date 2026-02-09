@@ -31,7 +31,7 @@ with open_trait("EU", "AlbInT2D") as f:
 
 ## Public API
 
-- `open_text(uri: str, *, encoding: str = "utf-8") -> TextIO`
+- `open_text(uri: str, *, encoding: str = "utf-8", retries: int = 3, download: bool = False) -> TextIO`
 - `exists(uri: str) -> bool`
 - `resolve_uri(uri: str) -> str`
 - `register_backend(backend) -> None`
@@ -161,3 +161,4 @@ PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli docs dataset1/ --recursi
 - Gzip detection is based on the first two bytes (0x1f, 0x8b), not filename.
 - S3 access uses unsigned HTTPS requests via `urllib.request` to avoid extra dependencies.
 - Backends are intentionally minimal; add new schemes by registering a backend implementing the small protocol.
+- `open_text(..., retries=N)` retries on truncated gzip streams by reopening and skipping already-read characters. Use `download=True` to stage remote files locally before reading.
