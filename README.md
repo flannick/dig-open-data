@@ -168,3 +168,39 @@ PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli docs dataset1/ --recursi
 - S3 access uses unsigned HTTPS requests via `urllib.request` to avoid extra dependencies.
 - Backends are intentionally minimal; add new schemes by registering a backend implementing the small protocol.
 - `open_text(..., retries=N)` retries on truncated gzip streams by reopening and skipping already-read characters. Use `download=True` to stage remote files locally before reading.
+
+## Caching (Optional)
+
+Caching is **opt‑in**. If you do nothing, behavior is unchanged (streaming reads).
+
+### Option 1: Explicit cache config (recommended)
+
+```python
+from dig_open_data import CacheConfig, open_trait
+
+cache = CacheConfig(dir="/data/dig_cache", max_bytes=10 * 1024**3, ttl_days=None)
+with open_trait("EU", "AlbInT2D", cache=cache) as f:
+    ...
+```
+
+### Option 2: Environment variables (fallback)
+
+Set at least `DIG_OPEN_DATA_CACHE_DIR` to enable caching. Other variables are optional.
+
+```bash
+export DIG_OPEN_DATA_CACHE_DIR=/data/dig_cache
+export DIG_OPEN_DATA_CACHE_MAX_BYTES=10737418240  # 10GB
+export DIG_OPEN_DATA_CACHE_TTL_DAYS=30
+```
+
+Env defaults:
+- If `DIG_OPEN_DATA_CACHE_DIR` is **not** set, caching is **disabled**.
+- If `DIG_OPEN_DATA_CACHE_DIR` is set:
+  - `DIG_OPEN_DATA_CACHE_MAX_BYTES` defaults to 10GB if unset.
+  - `DIG_OPEN_DATA_CACHE_TTL_DAYS` defaults to no TTL if unset.
+  
+If the environment variables are set, caching is enabled automatically even if your script doesn’t change.
+
+### Eviction
+
+The cache uses least‑recently‑used (LRU) eviction based on last access time. When the cache exceeds `max_bytes`, the oldest entries are removed first.

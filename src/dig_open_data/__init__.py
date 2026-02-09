@@ -1,4 +1,5 @@
 from .api import exists, open_text, register_backend, resolve_uri
+from .cache import CacheConfig
 from .catalog import (
     DEFAULT_BUCKET,
     DEFAULT_PREFIX,
@@ -24,6 +25,7 @@ __all__ = [
     "exists",
     "resolve_uri",
     "register_backend",
+    "CacheConfig",
     "DEFAULT_BUCKET",
     "DEFAULT_PREFIX",
     "DEFAULT_SUFFIX",

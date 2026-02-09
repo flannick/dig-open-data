@@ -1,8 +1,10 @@
 import gzip
 import io
+import tempfile
 import unittest
+from unittest import mock
 
-from dig_open_data import open_text
+from dig_open_data import CacheConfig, open_text
 from dig_open_data.api import register_backend
 
 
@@ -55,6 +57,27 @@ class TestOpenTextRetries(unittest.TestCase):
         with self.assertRaises((gzip.BadGzipFile, EOFError, OSError)):
             with open_text("fake://object", retries=1) as handle:
                 _ = handle.read()
+
+
+class TestCacheConfigEnv(unittest.TestCase):
+    def test_cache_env_fallback(self):
+        content = "col1\tcol2\n1\t2\n".encode("utf-8")
+        payload = gzip.compress(content)
+        backend = FakeBackend([payload])
+        register_backend(backend)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch.dict(
+                "os.environ",
+                {
+                    "DIG_OPEN_DATA_CACHE_DIR": tmpdir,
+                    "DIG_OPEN_DATA_CACHE_MAX_BYTES": "1048576",
+                },
+                clear=False,
+            ):
+                with open_text("fake://object", retries=0) as handle:
+                    data = handle.read()
+        self.assertIn("col1", data)
 
 
 if __name__ == "__main__":

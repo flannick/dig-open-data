@@ -4,6 +4,7 @@ import urllib.parse
 from typing import BinaryIO, Dict
 
 from .backends import Backend, LocalBackend, S3HttpBackend
+from .cache import CacheConfig, CacheStore, cache_config_from_env
 import os
 import tempfile
 
@@ -33,9 +34,21 @@ def open_text(
     encoding: str = "utf-8",
     retries: int = 3,
     download: bool = False,
+    cache: CacheConfig | None = None,
 ):
     resolved = resolve_uri(uri)
     backend = _select_backend(resolved)
+
+    cache_config = cache or cache_config_from_env()
+
+    if cache_config is not None and _is_remote_uri(resolved):
+        return _open_text_cached(
+            backend,
+            resolved,
+            encoding=encoding,
+            retries=retries,
+            cache_config=cache_config,
+        )
 
     if download and _is_remote_uri(resolved):
         return _open_text_downloaded(
@@ -88,6 +101,26 @@ def _open_text_downloaded(
     return _CleanupTextIO(handle, tmp_path)
 
 
+def _open_text_cached(
+    backend: Backend,
+    uri: str,
+    *,
+    encoding: str,
+    retries: int,
+    cache_config: CacheConfig,
+):
+    cache_store = CacheStore(cache_config)
+    cached = cache_store.get(uri)
+    if cached is not None:
+        handle = open_text_stream(open(cached, "rb"), encoding)
+        return handle
+
+    tmp_path, size = _download_to_temp(backend, uri, retries=retries)
+    cached_path = cache_store.put(uri, tmp_path, size)
+    handle = open_text_stream(open(cached_path, "rb"), encoding)
+    return handle
+
+
 def _download_with_retries(backend: Backend, uri: str, *, retries: int) -> str:
     attempts = max(0, retries)
     last_error: Exception | None = None
@@ -119,6 +152,37 @@ def _download_with_retries(backend: Backend, uri: str, *, retries: int) -> str:
     raise RuntimeError("Failed to download resource")
 
 
+def _download_to_temp(backend: Backend, uri: str, *, retries: int) -> tuple[str, int]:
+    attempts = max(0, retries)
+    last_error: Exception | None = None
+    for _ in range(attempts + 1):
+        try:
+            with backend.open_binary(uri) as response:
+                content_length = _get_content_length(response)
+                fd, path = tempfile.mkstemp(prefix="dig-open-data-", suffix=".tmp")
+                os.close(fd)
+                bytes_read = 0
+                with open(path, "wb") as out:
+                    while True:
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                        bytes_read += len(chunk)
+                if content_length is not None and bytes_read < content_length:
+                    os.remove(path)
+                    raise OSError(
+                        f"Downloaded {bytes_read} bytes, expected {content_length}"
+                    )
+                return path, bytes_read
+        except Exception as exc:
+            last_error = exc
+            continue
+    if last_error:
+        raise last_error
+    raise RuntimeError("Failed to download resource")
+
+
 def _get_content_length(response) -> int | None:
     length = getattr(response, "length", None)
     if isinstance(length, int) and length >= 0:
@@ -140,7 +204,7 @@ def _is_remote_uri(uri: str) -> bool:
 
 
 class _CleanupTextIO:
-    def __init__(self, inner, path: str) -> None:
+    def __init__(self, inner, path: str | None) -> None:
         self._inner = inner
         self._path = path
 
@@ -148,10 +212,11 @@ class _CleanupTextIO:
         try:
             self._inner.close()
         finally:
-            try:
-                os.remove(self._path)
-            except OSError:
-                pass
+            if self._path:
+                try:
+                    os.remove(self._path)
+                except OSError:
+                    pass
 
     def __enter__(self):
         return self
