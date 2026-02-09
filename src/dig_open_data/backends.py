@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import os
 import time
 import urllib.parse
 import urllib.request
@@ -57,7 +58,12 @@ class S3HttpBackend:
         for url in urls:
             for attempt in range(self._retries + 1):
                 request = urllib.request.Request(
-                    url, method="GET", headers={"User-Agent": "dig-open-data/0.1"}
+                    url,
+                    method="GET",
+                    headers={
+                        "User-Agent": "dig-open-data/0.1",
+                        "Accept-Encoding": "identity",
+                    },
                 )
                 try:
                     return urllib.request.urlopen(request, timeout=60)
@@ -67,12 +73,14 @@ class S3HttpBackend:
                             f"S3 object not found: {uri} (resolved {url})"
                         ) from exc
                     last_error = exc
+                    _maybe_debug(uri, url, exc)
                     if attempt < self._retries and exc.code in {429, 500, 502, 503, 504}:
                         time.sleep(self._backoff * (2**attempt))
                         continue
                     break
                 except urllib.error.URLError as exc:
                     last_error = exc
+                    _maybe_debug(uri, url, exc)
                     if attempt < self._retries:
                         time.sleep(self._backoff * (2**attempt))
                         continue
@@ -88,7 +96,12 @@ class S3HttpBackend:
         last_error: Exception | None = None
         for url in urls:
             request = urllib.request.Request(
-                url, method="HEAD", headers={"User-Agent": "dig-open-data/0.1"}
+                url,
+                method="HEAD",
+                headers={
+                    "User-Agent": "dig-open-data/0.1",
+                    "Accept-Encoding": "identity",
+                },
             )
             try:
                 with urllib.request.urlopen(request, timeout=30) as response:
@@ -97,9 +110,11 @@ class S3HttpBackend:
                 if exc.code == 404:
                     return False
                 last_error = exc
+                _maybe_debug(uri, url, exc)
                 continue
             except urllib.error.URLError as exc:
                 last_error = exc
+                _maybe_debug(uri, url, exc)
                 continue
         if isinstance(last_error, urllib.error.HTTPError):
             raise RuntimeError(
@@ -123,8 +138,21 @@ def s3_uri_to_https_urls(uri: str) -> list[str]:
         return [
             f"https://{bucket}.s3.amazonaws.com/{quoted_key}",
             f"https://s3.amazonaws.com/{bucket}/{quoted_key}",
+            f"https://{bucket}.s3.us-east-1.amazonaws.com/{quoted_key}",
+            f"https://s3.us-east-1.amazonaws.com/{bucket}/{quoted_key}",
         ]
     return [
         f"https://{bucket}.s3.amazonaws.com/",
         f"https://s3.amazonaws.com/{bucket}/",
+        f"https://{bucket}.s3.us-east-1.amazonaws.com/",
+        f"https://s3.us-east-1.amazonaws.com/{bucket}/",
     ]
+
+
+def _maybe_debug(uri: str, url: str, exc: Exception) -> None:
+    if os.environ.get("DIG_OPEN_DATA_S3_DEBUG") != "1":
+        return
+    try:
+        print(f"[dig-open-data] S3 error for {uri} -> {url}: {exc}", file=os.sys.stderr)
+    except Exception:
+        pass
