@@ -17,6 +17,9 @@ class Backend(Protocol):
     def exists(self, uri: str) -> bool:
         ...
 
+    def head_metadata(self, uri: str) -> dict:
+        return {}
+
     def resolve_uri(self, uri: str) -> str:
         return uri
 
@@ -34,6 +37,16 @@ class LocalBackend:
 
     def resolve_uri(self, uri: str) -> str:
         return self._uri_to_path(uri)
+
+    def head_metadata(self, uri: str) -> dict:
+        path = self._uri_to_path(uri)
+        if not os.path.exists(path):
+            return {}
+        stat = os.stat(path)
+        return {
+            "content_length": stat.st_size,
+            "last_modified": str(int(stat.st_mtime)),
+        }
 
     @staticmethod
     def _uri_to_path(uri: str) -> str:
@@ -122,6 +135,31 @@ class S3HttpBackend:
             ) from last_error
         raise RuntimeError(f"S3 request failed: {uri}") from last_error
 
+    def head_metadata(self, uri: str) -> dict:
+        urls = s3_uri_to_https_urls(uri)
+        last_error: Exception | None = None
+        for url in urls:
+            request = urllib.request.Request(
+                url,
+                method="HEAD",
+                headers={
+                    "User-Agent": "dig-open-data/0.1",
+                    "Accept-Encoding": "identity",
+                },
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    return _headers_to_metadata(response)
+            except urllib.error.HTTPError as exc:
+                last_error = exc
+                continue
+            except urllib.error.URLError as exc:
+                last_error = exc
+                continue
+        if last_error:
+            raise last_error
+        return {}
+
 
 def s3_uri_to_https_url(uri: str) -> str:
     return s3_uri_to_https_urls(uri)[0]
@@ -147,6 +185,26 @@ def s3_uri_to_https_urls(uri: str) -> list[str]:
         f"https://{bucket}.s3.us-east-1.amazonaws.com/",
         f"https://s3.us-east-1.amazonaws.com/{bucket}/",
     ]
+
+
+def _headers_to_metadata(response) -> dict:
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return {}
+    etag = headers.get("ETag") or headers.get("Etag")
+    last_modified = headers.get("Last-Modified")
+    length = headers.get("Content-Length")
+    metadata = {}
+    if etag:
+        metadata["etag"] = etag.strip("\"")
+    if last_modified:
+        metadata["last_modified"] = last_modified
+    if length:
+        try:
+            metadata["content_length"] = int(length)
+        except ValueError:
+            pass
+    return metadata
 
 
 def _maybe_debug(uri: str, url: str, exc: Exception) -> None:

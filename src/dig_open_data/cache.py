@@ -29,8 +29,9 @@ class CacheStore:
         self._objects_dir = os.path.join(self._dir, "objects")
         self._index_path = os.path.join(self._dir, "index.jsonl")
         os.makedirs(self._objects_dir, exist_ok=True)
+        self._cleanup_partials()
 
-    def get(self, key: str) -> str | None:
+    def get(self, key: str) -> dict | None:
         entry = self._load_index().get(key)
         if entry is None:
             return None
@@ -42,9 +43,9 @@ class CacheStore:
             self._delete_entry(key, entry)
             return None
         self._touch(key, entry)
-        return path
+        return entry
 
-    def put(self, key: str, source_path: str, size: int) -> str:
+    def put(self, key: str, source_path: str, size: int, metadata: dict | None = None) -> str:
         digest = sha256(key.encode("utf-8")).hexdigest()
         dest_path = os.path.join(self._objects_dir, digest)
         os.replace(source_path, dest_path)
@@ -55,6 +56,8 @@ class CacheStore:
             "created_at": now,
             "last_access": now,
         }
+        if metadata:
+            entry.update(metadata)
         index = self._load_index()
         index[key] = entry
         self._write_index(index)
@@ -101,6 +104,11 @@ class CacheStore:
             del index[key]
             self._write_index(index)
 
+    def delete(self, key: str) -> None:
+        entry = self._load_index().get(key)
+        if entry is not None:
+            self._delete_entry(key, entry)
+
     def _load_index(self) -> dict:
         if not os.path.exists(self._index_path):
             return {}
@@ -124,6 +132,16 @@ class CacheStore:
                 handle.write(json.dumps({"key": key, "entry": entry}) + "\n")
         os.replace(path, self._index_path)
 
+    def _cleanup_partials(self) -> None:
+        try:
+            for name in os.listdir(self._objects_dir):
+                if name.endswith(".partial"):
+                    try:
+                        os.remove(os.path.join(self._objects_dir, name))
+                    except OSError:
+                        pass
+        except OSError:
+            pass
 
 def cache_config_from_env() -> CacheConfig | None:
     cache_dir = os.environ.get("DIG_OPEN_DATA_CACHE_DIR")

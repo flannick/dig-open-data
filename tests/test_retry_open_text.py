@@ -80,5 +80,36 @@ class TestCacheConfigEnv(unittest.TestCase):
         self.assertIn("col1", data)
 
 
+class TestCacheRefresh(unittest.TestCase):
+    def test_cache_refresh_forces_redownload(self):
+        content1 = gzip.compress(b"a\n")
+        content2 = gzip.compress(b"b\n")
+
+        class MetaBackend(FakeBackend):
+            def __init__(self, payloads, etags):
+                super().__init__(payloads)
+                self._etags = etags
+                self._head_calls = 0
+
+            def head_metadata(self, uri: str) -> dict:
+                self._head_calls += 1
+                index = min(self.calls, len(self._etags) - 1)
+                return {"etag": self._etags[index], "last_modified": f"t{index}"}
+
+        backend = MetaBackend([content1, content2], ["etag1", "etag2"])
+        register_backend(backend)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = CacheConfig(dir=tmpdir, max_bytes=1024 * 1024)
+            with open_text("fake://object", cache=cache, retries=0) as handle:
+                first = handle.read()
+            with open_text(
+                "fake://object", cache=cache, retries=0, cache_refresh=True
+            ) as handle:
+                second = handle.read()
+
+        self.assertNotEqual(first, second)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -35,11 +35,14 @@ def open_text(
     retries: int = 3,
     download: bool = False,
     cache: CacheConfig | None = None,
+    cache_refresh: bool = False,
 ):
     resolved = resolve_uri(uri)
     backend = _select_backend(resolved)
 
     cache_config = cache or cache_config_from_env()
+    if _cache_force_env():
+        cache_refresh = True
 
     if cache_config is not None and _is_remote_uri(resolved):
         return _open_text_cached(
@@ -48,6 +51,7 @@ def open_text(
             encoding=encoding,
             retries=retries,
             cache_config=cache_config,
+            cache_refresh=cache_refresh,
         )
 
     if download and _is_remote_uri(resolved):
@@ -108,15 +112,20 @@ def _open_text_cached(
     encoding: str,
     retries: int,
     cache_config: CacheConfig,
+    cache_refresh: bool,
 ):
     cache_store = CacheStore(cache_config)
-    cached = cache_store.get(uri)
-    if cached is not None:
-        handle = open_text_stream(open(cached, "rb"), encoding)
-        return handle
+    cached_entry = cache_store.get(uri)
+    if cached_entry is not None and not cache_refresh:
+        if _cache_entry_valid(backend, uri, cached_entry):
+            handle = open_text_stream(open(cached_entry["path"], "rb"), encoding)
+            return handle
+        cache_store.delete(uri)
 
-    tmp_path, size = _download_to_temp(backend, uri, retries=retries)
-    cached_path = cache_store.put(uri, tmp_path, size)
+    tmp_path, size, metadata = _download_to_temp(
+        backend, uri, retries=retries, cache_dir=cache_store._objects_dir
+    )
+    cached_path = cache_store.put(uri, tmp_path, size, metadata=metadata)
     handle = open_text_stream(open(cached_path, "rb"), encoding)
     return handle
 
@@ -152,14 +161,25 @@ def _download_with_retries(backend: Backend, uri: str, *, retries: int) -> str:
     raise RuntimeError("Failed to download resource")
 
 
-def _download_to_temp(backend: Backend, uri: str, *, retries: int) -> tuple[str, int]:
+def _download_to_temp(
+    backend: Backend,
+    uri: str,
+    *,
+    retries: int,
+    cache_dir: str | None = None,
+) -> tuple[str, int, dict]:
     attempts = max(0, retries)
     last_error: Exception | None = None
     for _ in range(attempts + 1):
         try:
             with backend.open_binary(uri) as response:
                 content_length = _get_content_length(response)
-                fd, path = tempfile.mkstemp(prefix="dig-open-data-", suffix=".tmp")
+                if cache_dir:
+                    fd, path = tempfile.mkstemp(
+                        prefix="dig-open-data-", suffix=".partial", dir=cache_dir
+                    )
+                else:
+                    fd, path = tempfile.mkstemp(prefix="dig-open-data-", suffix=".tmp")
                 os.close(fd)
                 bytes_read = 0
                 with open(path, "wb") as out:
@@ -174,7 +194,10 @@ def _download_to_temp(backend: Backend, uri: str, *, retries: int) -> tuple[str,
                     raise OSError(
                         f"Downloaded {bytes_read} bytes, expected {content_length}"
                     )
-                return path, bytes_read
+                metadata = _get_response_metadata(response)
+                if content_length is not None:
+                    metadata["content_length"] = content_length
+                return path, bytes_read, metadata
         except Exception as exc:
             last_error = exc
             continue
@@ -196,6 +219,50 @@ def _get_content_length(response) -> int | None:
             except ValueError:
                 return None
     return None
+
+
+def _get_response_metadata(response) -> dict:
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return {}
+    etag = headers.get("ETag") or headers.get("Etag")
+    last_modified = headers.get("Last-Modified")
+    metadata = {}
+    if etag:
+        metadata["etag"] = etag.strip("\"")
+    if last_modified:
+        metadata["last_modified"] = last_modified
+    return metadata
+
+
+def _cache_entry_valid(backend: Backend, uri: str, entry: dict) -> bool:
+    meta = _remote_metadata(backend, uri)
+    if not meta:
+        return True
+    etag = entry.get("etag")
+    if etag and meta.get("etag") and etag != meta.get("etag"):
+        return False
+    last_modified = entry.get("last_modified")
+    if last_modified and meta.get("last_modified") and last_modified != meta.get("last_modified"):
+        return False
+    content_length = entry.get("content_length")
+    if content_length and meta.get("content_length") and content_length != meta.get("content_length"):
+        return False
+    return True
+
+
+def _remote_metadata(backend: Backend, uri: str) -> dict:
+    if hasattr(backend, "head_metadata"):
+        try:
+            return backend.head_metadata(uri)
+        except Exception:
+            return {}
+    return {}
+
+
+def _cache_force_env() -> bool:
+    value = os.environ.get("DIG_OPEN_DATA_CACHE_FORCE", "")
+    return value.lower() in {"1", "true", "yes"}
 
 
 def _is_remote_uri(uri: str) -> bool:

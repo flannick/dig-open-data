@@ -53,7 +53,7 @@ with open_trait("EU", "AlbInT2D") as f:
 
 ## Public API
 
-- `open_text(uri: str, *, encoding: str = "utf-8", retries: int = 3, download: bool = False) -> TextIO`
+- `open_text(uri: str, *, encoding: str = "utf-8", retries: int = 3, download: bool = False, cache: CacheConfig | None = None, cache_refresh: bool = False) -> TextIO`
 - `exists(uri: str) -> bool`
 - `resolve_uri(uri: str) -> str`
 - `register_backend(backend) -> None`
@@ -217,6 +217,14 @@ Env defaults:
   - `DIG_OPEN_DATA_CACHE_TTL_DAYS` defaults to no TTL if unset.
   
 If the environment variables are set, caching is enabled automatically even if your script doesn’t change.
+
+Force refresh:
+
+```bash
+export DIG_OPEN_DATA_CACHE_FORCE=1
+```
+
+If set, cached entries are ignored and re-downloaded.
 
 ### Eviction
 
