@@ -36,7 +36,7 @@ list_ancestries()
 list_traits(ancestry = "EU")
 
 con <- open_trait("EU", "AlbInT2D")
-lines <- read_lines("s3://dig-open-bottom-line-analysis/bottom-line/EU/AlbInT2D.sumstats.tsv.gz")
+lines <- read_trait_lines("EU", "AlbInT2D")
 ```
 
 ## Quick Start

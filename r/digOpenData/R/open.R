@@ -2,6 +2,12 @@ open_trait <- function(ancestry, trait, bucket = DEFAULT_BUCKET, prefix = DEFAUL
                        suffix = DEFAULT_SUFFIX, encoding = "UTF-8", retries = 3,
                        download = FALSE, cache = NULL) {
   key <- build_key(ancestry, trait, prefix = prefix, suffix = suffix)
+  open_file_key(key, bucket = bucket, encoding = encoding, retries = retries,
+                download = download, cache = cache)
+}
+
+open_file_key <- function(key, bucket = DEFAULT_BUCKET, encoding = "UTF-8", retries = 3,
+                          download = FALSE, cache = NULL) {
   uri <- sprintf("s3://%s/%s", bucket, key)
   open_text(uri, encoding = encoding, retries = retries, download = download, cache = cache)
 }
@@ -47,6 +53,23 @@ read_lines <- function(uri, encoding = "UTF-8", retries = 3, download = FALSE, c
     lines <- c(lines, result)
     return(lines)
   }
+}
+
+read_trait_lines <- function(ancestry, trait, bucket = DEFAULT_BUCKET, prefix = DEFAULT_PREFIX,
+                             suffix = DEFAULT_SUFFIX, encoding = "UTF-8", retries = 3,
+                             download = FALSE, cache = NULL) {
+  con <- open_trait(ancestry, trait, bucket = bucket, prefix = prefix, suffix = suffix,
+                    encoding = encoding, retries = retries, download = download, cache = cache)
+  on.exit(close(con), add = TRUE)
+  readLines(con)
+}
+
+read_file_lines <- function(key, bucket = DEFAULT_BUCKET, encoding = "UTF-8",
+                            retries = 3, download = FALSE, cache = NULL) {
+  con <- open_file_key(key, bucket = bucket, encoding = encoding, retries = retries,
+                       download = download, cache = cache)
+  on.exit(close(con), add = TRUE)
+  readLines(con)
 }
 
 open_connection <- function(uri, encoding = "UTF-8") {
