@@ -66,8 +66,6 @@ with open_trait("EU", "AlbInT2D") as f:
 - `list_files_with_metadata(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, ancestry: str | None = None, max_keys: int = 1000, limit: int | None = None, contains: str | None = None) -> list[FileEntry]`
 - `build_key(ancestry: str, trait: str, *, prefix: str = DEFAULT_PREFIX, suffix: str = DEFAULT_SUFFIX) -> str`
 - `open_trait(ancestry: str, trait: str, *, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, suffix: str = DEFAULT_SUFFIX, encoding: str = "utf-8", cache: CacheConfig | None = None) -> TextIO`
-- `get_documentation(dataset_prefix: str, *, bucket: str = DEFAULT_BUCKET, recursive: bool = False, doc_filenames: Iterable[str] = DOC_FILENAMES) -> dict[str, str]`
-- `list_datasets_with_docs(*, bucket: str = DEFAULT_BUCKET, prefix: str = "", recursive: bool = False, doc_filenames: Iterable[str] = DOC_FILENAMES) -> list[tuple[str, dict[str, str]]]`
 
 ## Input Formats
 
@@ -90,11 +88,8 @@ for entry in entries:
 
 Notes:
 - `list_dataset_files()` uses S3 ListObjectsV2 to return full object keys.
-- `get_documentation()` looks for common doc filenames (README, manifest, metadata). Set `recursive=True` to search deeper paths.
 
 ## Tests
-
-From `analysis/dig_open_data_module`:
 
 ```bash
 PYTHONPATH=src/dig_open_data/src ../.venv/bin/python -m unittest discover -s tests
@@ -153,14 +148,6 @@ dig-open-data list --with-ancestry
 dig-open-data list --with-ancestry --ancestry EU --limit 20
 ```
 
-Fetch documentation for a dataset prefix:
-
-```bash
-dig-open-data docs dataset1/
-dig-open-data docs dataset1/ --recursive --json
-dig-open-data docs dataset1/ --names README.md manifest.json
-```
-
 ### Option 2: No install (PYTHONPATH)
 
 From the repo root:
@@ -171,7 +158,6 @@ PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli list --with-ancestry
 PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli ancestries
 PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli traits --ancestry EU
 PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli stream --ancestry EU --trait AlbInT2D | head
-PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli docs dataset1/ --recursive
 ```
 
 ### Listing Best Practices
