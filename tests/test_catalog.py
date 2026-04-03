@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import io
 import unittest
 from unittest import mock

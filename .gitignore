@@ -7,3 +7,4 @@ __pycache__/
 .coverage
 .idea/
 .python-version
+src/dig_open_data.egg-info
