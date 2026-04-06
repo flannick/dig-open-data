@@ -65,9 +65,7 @@ with open_trait("EU", "AlbInT2D") as f:
 - `list_dataset_files(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, max_keys: int = 1000, limit: int | None = None, ancestry: str | None = None, contains: str | None = None) -> list[str]`
 - `list_files_with_metadata(*, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, ancestry: str | None = None, max_keys: int = 1000, limit: int | None = None, contains: str | None = None) -> list[FileEntry]`
 - `build_key(ancestry: str, trait: str, *, prefix: str = DEFAULT_PREFIX, suffix: str = DEFAULT_SUFFIX) -> str`
-- `open_trait(ancestry: str, trait: str, *, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, suffix: str = DEFAULT_SUFFIX, encoding: str = "utf-8") -> TextIO`
-- `get_documentation(dataset_prefix: str, *, bucket: str = DEFAULT_BUCKET, recursive: bool = False, doc_filenames: Iterable[str] = DOC_FILENAMES) -> dict[str, str]`
-- `list_datasets_with_docs(*, bucket: str = DEFAULT_BUCKET, prefix: str = "", recursive: bool = False, doc_filenames: Iterable[str] = DOC_FILENAMES) -> list[tuple[str, dict[str, str]]]`
+- `open_trait(ancestry: str, trait: str, *, bucket: str = DEFAULT_BUCKET, prefix: str = DEFAULT_PREFIX, suffix: str = DEFAULT_SUFFIX, encoding: str = "utf-8", cache: CacheConfig | None = None) -> TextIO`
 
 ## Input Formats
 
@@ -90,14 +88,11 @@ for entry in entries:
 
 Notes:
 - `list_dataset_files()` uses S3 ListObjectsV2 to return full object keys.
-- `get_documentation()` looks for common doc filenames (README, manifest, metadata). Set `recursive=True` to search deeper paths.
 
 ## Tests
 
-From `analysis/dig_open_data_module`:
-
 ```bash
-PYTHONPATH=src/dig_open_data/src ../.venv/bin/python -m unittest discover -s src/dig_open_data/tests
+PYTHONPATH=src/dig_open_data/src ../.venv/bin/python -m unittest discover -s tests
 ```
 
 ## CLI
@@ -106,7 +101,8 @@ You can run the CLI in two ways.
 
 ### Option 1: Install (recommended for repeated use)
 
-Install in editable mode, then use the `dig-open-data` command:
+Install in editable mode, then use the `dig-open-data` command 
+(NOTE: You might have to load a new tab or restart your terminal session):
 
 ```bash
 python -m pip install -e .
@@ -117,7 +113,7 @@ List files under the default DIG prefix (`bottom-line/`):
 ```bash
 dig-open-data list
 dig-open-data list --limit 10
-dig-open-data list --ancestry EUR --json
+dig-open-data list --ancestry EU --json
 dig-open-data list --contains T2D
 dig-open-data list --max-keys 500
 ```
@@ -149,15 +145,7 @@ Include ancestry + trait metadata in listings:
 
 ```bash
 dig-open-data list --with-ancestry
-dig-open-data list --with-ancestry --ancestry EUR --limit 20
-```
-
-Fetch documentation for a dataset prefix:
-
-```bash
-dig-open-data docs dataset1/
-dig-open-data docs dataset1/ --recursive --json
-dig-open-data docs dataset1/ --names README.md manifest.json
+dig-open-data list --with-ancestry --ancestry EU --limit 20
 ```
 
 ### Option 2: No install (PYTHONPATH)
@@ -170,7 +158,6 @@ PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli list --with-ancestry
 PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli ancestries
 PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli traits --ancestry EU
 PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli stream --ancestry EU --trait AlbInT2D | head
-PYTHONPATH=src ../.venv/bin/python -m dig_open_data.cli docs dataset1/ --recursive
 ```
 
 ### Listing Best Practices
@@ -195,7 +182,7 @@ Caching is **opt‑in**. If you do nothing, behavior is unchanged (streaming rea
 ```python
 from dig_open_data import CacheConfig, open_trait
 
-cache = CacheConfig(dir="/data/dig_cache", max_bytes=10 * 1024**3, ttl_days=None)
+cache = CacheConfig(dir="./data/dig_cache", max_bytes=10 * 1024**3, ttl_days=None)
 with open_trait("EU", "AlbInT2D", cache=cache) as f:
     ...
 ```

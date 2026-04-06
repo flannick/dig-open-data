@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import unittest
 
 from dig_open_data.streams import open_text_stream_with_retries

@@ -153,6 +153,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ancestry for --trait streaming",
     )
     stream_parser.add_argument(
+        "--prefix",
+        default=DEFAULT_PREFIX,
+        help=f"Prefix to scope listing (default: {DEFAULT_PREFIX})",
+    )
+    stream_parser.add_argument(
         "--encoding",
         default="utf-8",
         help="Text encoding to use (default: utf-8)",

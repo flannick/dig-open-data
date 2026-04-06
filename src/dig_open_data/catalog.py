@@ -234,10 +234,11 @@ def open_trait(
     prefix: str = DEFAULT_PREFIX,
     suffix: str = DEFAULT_SUFFIX,
     encoding: str = "utf-8",
+    cache: CacheConfig | None = None,
 ):
     key = build_key(ancestry, trait, prefix=prefix, suffix=suffix)
     uri = f"s3://{bucket}/{key}"
-    return open_text(uri, encoding=encoding)
+    return open_text(uri, encoding=encoding, cache=cache)
 
 
 def get_documentation(
