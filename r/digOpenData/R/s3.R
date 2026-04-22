@@ -25,7 +25,7 @@ s3_list_objects_page <- function(bucket, prefix = "", delimiter = NULL, max_keys
   if (prefix != "") query$prefix <- prefix
   if (!is.null(delimiter)) query$delimiter <- delimiter
   if (!is.null(token)) query$`continuation-token` <- token
-  query_string <- paste(paste(names(query), query, sep = "="), collapse = "&")
+  query_string <- build_query_string(query)
 
   url <- sprintf("https://%s.s3.amazonaws.com?%s", bucket, query_string)
   con <- url(url, open = "rb")
@@ -34,17 +34,40 @@ s3_list_objects_page <- function(bucket, prefix = "", delimiter = NULL, max_keys
   parse_list_objects(xml)
 }
 
+build_query_string <- function(query) {
+  encoded_names <- utils::URLencode(names(query), reserved = TRUE)
+  encoded_values <- vapply(
+    query,
+    function(value) utils::URLencode(as.character(value), reserved = TRUE),
+    character(1)
+  )
+  paste(paste(encoded_names, encoded_values, sep = "="), collapse = "&")
+}
+
 parse_list_objects <- function(xml_raw) {
   doc <- xml2::read_xml(xml_raw)
-  is_truncated <- xml2::xml_text(xml2::xml_find_first(doc, ".//{*}IsTruncated")) == "true"
-  next_token <- xml2::xml_text(xml2::xml_find_first(doc, ".//{*}NextContinuationToken"))
-  if (is.na(next_token)) next_token <- NULL
+  is_truncated_node <- xml2::xml_find_first(doc, ".//*[local-name()='IsTruncated']")
+  next_token_node <- xml2::xml_find_first(doc, ".//*[local-name()='NextContinuationToken']")
+  key_nodes <- xml2::xml_find_all(doc, ".//*[local-name()='Contents']/*[local-name()='Key']")
+  prefix_nodes <- xml2::xml_find_all(doc, ".//*[local-name()='CommonPrefixes']/*[local-name()='Prefix']")
 
-  keys <- xml2::xml_find_all(doc, ".//{*}Contents/{*}Key")
-  keys <- xml2::xml_text(keys)
+  is_truncated_text <- xml2::xml_text(is_truncated_node)
+  is_truncated <- !is.na(is_truncated_text) && is_truncated_text == "true"
 
-  prefixes <- xml2::xml_find_all(doc, ".//{*}CommonPrefixes/{*}Prefix")
-  prefixes <- xml2::xml_text(prefixes)
+  next_token <- xml2::xml_text(next_token_node)
+  if (length(next_token) == 0 || is.na(next_token) || next_token == "") {
+    next_token <- NULL
+  }
+
+  keys <- xml2::xml_text(key_nodes)
+  if (length(keys) == 0) {
+    keys <- character(0)
+  }
+
+  prefixes <- xml2::xml_text(prefix_nodes)
+  if (length(prefixes) == 0) {
+    prefixes <- character(0)
+  }
 
   list(keys = keys, common_prefixes = prefixes, is_truncated = is_truncated, next_token = next_token)
 }

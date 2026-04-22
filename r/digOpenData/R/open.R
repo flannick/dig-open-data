@@ -81,12 +81,11 @@ open_connection <- function(uri, encoding = "UTF-8") {
 
 open_local_connection <- function(path, encoding = "UTF-8") {
   con <- file(path, open = "rb")
-  on.exit(close(con), add = TRUE)
   gz <- is_gzipped(con)
   close(con)
   con <- file(path, open = "rb")
   if (gz) {
-    gzcon(con, encoding = encoding)
+    gzcon(con)
   } else {
     con
   }
@@ -98,12 +97,11 @@ open_remote_connection <- function(uri, encoding = "UTF-8") {
     return(open_s3_connection(parsed$bucket, parsed$key, encoding = encoding))
   }
   con <- url(uri, open = "rb")
-  on.exit(close(con), add = TRUE)
   gz <- is_gzipped(con)
   close(con)
   con <- url(uri, open = "rb")
   if (gz) {
-    gzcon(con, encoding = encoding)
+    gzcon(con)
   } else {
     con
   }
@@ -118,7 +116,6 @@ open_s3_connection <- function(bucket, key, encoding = "UTF-8") {
       last_error <- con
       next
     }
-    on.exit(close(con), add = TRUE)
     gz <- tryCatch(is_gzipped(con), error = function(e) e)
     close(con)
     if (inherits(gz, "error")) {
@@ -127,7 +124,7 @@ open_s3_connection <- function(bucket, key, encoding = "UTF-8") {
     }
     con <- url(url, open = "rb")
     if (isTRUE(gz)) {
-      return(gzcon(con, encoding = encoding))
+      return(gzcon(con))
     }
     return(con)
   }
@@ -151,7 +148,7 @@ parse_uri <- function(uri) {
 }
 
 is_remote_uri <- function(uri) {
-  grepl("^[a-zA-Z]+://", uri)
+  grepl("^[A-Za-z][A-Za-z0-9+.-]*://", uri)
 }
 
 open_text_downloaded <- function(uri, encoding = "UTF-8", retries = 3) {
